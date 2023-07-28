@@ -20,9 +20,9 @@ from flask import Response
 '''
 Globals that specify at which url metrics for nodes and pods can be found
 '''
-PROXY = 'http://127.0.0.1:8080'
-URL_NODES = PROXY + '/apis/metrics.k8s.io/v1beta1/nodes'
-URL_PODS = PROXY + '/apis/metrics.k8s.io/v1beta1/pods'
+API = 'https://kubernetes.default.svc'
+URL_NODES = API + '/apis/metrics.k8s.io/v1beta1/nodes'
+URL_PODS = API + '/apis/metrics.k8s.io/v1beta1/pods'
 
 def shell_exec(command):
     '''
@@ -250,9 +250,9 @@ application = Flask(__name__) # pylint: disable=invalid-name
 @application.route("/metrics")
 def metrics():
     '''
-    This function is the /metrics http entrypoint and will itself do two callbacks
-    to the running kubectl proxy in order to gather node and pod metrics from specified
-    kubernetes api urls. Current output is JSON and we must therefore transform both results
+    This function is the /metrics http entrypoint and will itself do the callback
+    to gather node and pod metrics from specified kubernetes api urls.
+    Current output is JSON and we must therefore transform both results
     into Prometheus readable format:
         https://prometheus.io/docs/instrumenting/exposition_formats/
         https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form
