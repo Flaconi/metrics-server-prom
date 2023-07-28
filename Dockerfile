@@ -25,10 +25,6 @@ RUN set -x \
 		${APT_RUN_DEPS} \
 	&& pip install \
 		${PIP_RUN_DEPS} \
-	&& curl -L https://storage.googleapis.com/kubernetes-release/release/$(curl \
-		-s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl \
-		-o /usr/bin/kubectl \
-	&& chmod +x /usr/bin/kubectl \
 	&& apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
 		${APT_BUILD_DEPS} \
 	&& rm -rf /var/lib/apt/lists/*
