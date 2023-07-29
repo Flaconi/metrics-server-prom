@@ -11,7 +11,7 @@ ENV APT_BUILD_DEPS \
 	libnewlib-arm-none-eabi
 
 ENV APT_RUN_DEPS \
-	python-pip \
+	python3-pip \
 	supervisor
 
 ENV PIP_RUN_DEPS \
