@@ -259,8 +259,8 @@ def metrics():
     '''
     # Get info from K8s API
     req = {
-        'nodes': requests.get(URL_NODES),
-        'pods': requests.get(URL_PODS)
+        'nodes': requests.get(URL_NODES, verify=False),
+        'pods': requests.get(URL_PODS, verify=False)
     }
 
     # Object to JSON text
@@ -292,8 +292,8 @@ def healthz():
                   If both a good, it will respond with 200.
     '''
     req = {
-        'nodes': requests.get(URL_NODES),
-        'pods': requests.get(URL_PODS)
+        'nodes': requests.get(URL_NODES, verify=False),
+        'pods': requests.get(URL_PODS, verify=False)
     }
     health = 'ok'
     status = 200
