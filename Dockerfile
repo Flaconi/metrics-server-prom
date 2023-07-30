@@ -35,7 +35,8 @@ RUN set -x \
 
 ENV PIP_RUN_DEPS \
 	flask \
-	requests
+	requests \
+	kubernetes
 
 USER ${USER}
 RUN set -x \

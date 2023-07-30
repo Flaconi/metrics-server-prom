@@ -11,46 +11,35 @@ import os
 import json
 import re
 import time
-import requests
 import subprocess
+import kubernetes.client
+from kubernetes import client, config
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from flask import Flask
 from flask import Response
 
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 '''
 Globals that specify at which url metrics for nodes and pods can be found
 '''
+
+with open('/var/run/secrets/kubernetes.io/serviceaccount/token','r') as saFile:
+    saToken = saFile.read()
+
 API = 'https://kubernetes.default.svc'
 URL_NODES = API + '/apis/metrics.k8s.io/v1beta1/nodes'
 URL_PODS = API + '/apis/metrics.k8s.io/v1beta1/pods'
+HEADERS = {"Authorization": "Bearer "+saToken}
 
-def shell_exec(command):
-    '''
-    Execute raw shell command and return exit code and output
-
-    Args:
-        command (str): Command to execute
-    Returns:
-        tuple (int, str, str): Returns exit code, stdout and stderr
-    '''
-    # Get absolute path of bash
-    bash = os.popen('command -v bash').read().rstrip('\r\n')
-
-    # Execute
-    cpt = subprocess.Popen(
-        command,
-        executable=bash,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-
-    # Get stdout, stderr and return code
-    stdout, stderr = cpt.communicate()
-    return_code = 0 #cpt.returncode
-
-    return return_code, stdout, stderr
-
+# create ApiClient
+cConfiguration = client.Configuration()
+cConfiguration.host = API
+cConfiguration.verify_ssl = False
+cConfiguration.api_key = {"authorization": "Bearer " + saToken}
+cApiClient = client.ApiClient(cConfiguration)
+v1 = client.CoreV1Api(cApiClient)
 
 def json2dict(data):
     '''
@@ -221,25 +210,20 @@ def get_pod_metrics_from_cli():
     '''
 
     data = dict()
-    command = 'kubectl get pods -o wide --no-headers --all-namespaces'
-    ret, out, err = shell_exec(command)
 
     # 1:NS | 2:Name | 3:Ready | 4:Status | 5:Restarts | 6:Age | 7:IP | 8:Node | 9: NOMINATED NODE
-    reg = re.compile(r"^([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ ]+)\s+([^ \n]+)[^\n]*$")
+    ret = v1.list_pod_for_all_namespaces(watch=False)
+    for line in ret.items:
 
-    for line in out.splitlines():
-        line = line.decode("utf-8")
-        line = reg.match(line)
-
-        data[line.group(2)] = {
-            'ns': line.group(1),
-            'name': line.group(2),
-            'ready': line.group(3),
-            'status': line.group(4),
-            'restarts': line.group(5),
-            'age': line.group(6),
-            'ip': line.group(7),
-            'node': line.group(8)
+        data[line.metadata.name] = {
+            'ns': line.metadata.namespace,
+            'name': line.metadata.name,
+            'ready': line.status.container_statuses[0].ready,
+            'status': line.status.phase,
+            'restarts': line.status.container_statuses[0].restart_count,
+            'age': 'n/a',
+            'ip': line.status.pod_ip,
+            'node': line.spec.node_name
         }
 
     return data
@@ -259,8 +243,8 @@ def metrics():
     '''
     # Get info from K8s API
     req = {
-        'nodes': requests.get(URL_NODES, verify=False),
-        'pods': requests.get(URL_PODS, verify=False)
+        'nodes': requests.get(URL_NODES, verify=False, headers=HEADERS),
+        'pods': requests.get(URL_PODS, verify=False, headers=HEADERS)
     }
 
     # Object to JSON text
@@ -292,8 +276,8 @@ def healthz():
                   If both a good, it will respond with 200.
     '''
     req = {
-        'nodes': requests.get(URL_NODES, verify=False),
-        'pods': requests.get(URL_PODS, verify=False)
+        'nodes': requests.get(URL_NODES, verify=False, headers=HEADERS),
+        'pods': requests.get(URL_PODS, verify=False, headers=HEADERS)
     }
     health = 'ok'
     status = 200
