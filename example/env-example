@@ -1,2 +1,0 @@
-KUBE_CONFIG_PATH=~/.kube/config
-KUBE_CONTEXT=minikube
