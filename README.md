@@ -1,21 +1,18 @@
 # Kubernetes Metrics Server Prometheus Adapter
 
 **[Motivation](#motivation)** |
-**[Usage](#usage)** |
-**[Docker Compose](#docker-compose)** |
 **[Metrics transformation](#metrics-transformation)** |
 **[License](#license)**
 
-[![Build Status](https://travis-ci.org/cytopia/metrics-server-prom.svg?branch=master)](https://travis-ci.org/cytopia/metrics-server-prom)
-[![release](https://img.shields.io/github/tag/cytopia/metrics-server-prom.svg)](https://github.com/cytopia/metrics-server-prom/releases)
+[![release](https://img.shields.io/github/tag/Flaconi/metrics-server-prom.svg)](https://github.com/cFlaconi/metrics-server-prom/releases)
 
-<a target="_blank" title="DockerHub" href="https://hub.docker.com/r/cytopia/metrics-server-prom/"><img src="https://dockeri.co/image/cytopia/metrics-server-prom" /></a>
+<a target="_blank" title="DockerHub" href="https://hub.docker.com/r/flaconi/metrics-server-prom/"><img src="https://dockeri.co/image/flaconi/metrics-server-prom" /></a>
 
 ## Motivation
 
 ### What is provided
 
-A Docker image on which [Prometheus](https://github.com/prometheus/prometheus) can scrape Kubernetes metrics provided by **[metrics-server](https://github.com/kubernetes-incubator/metrics-server)**. The image can run anywhere where Prometheus can use it as a target, even in Kubernetes itself.
+A Docker image on which [Prometheus](https://github.com/prometheus/prometheus) can scrape Kubernetes metrics provided by **[metrics-server](https://github.com/kubernetes-incubator/metrics-server)**. The image can run directly in a k8s cluster where Prometheus can use it as a target.
 
 ### Why is it needed
 
@@ -27,46 +24,24 @@ So in order for Prometheus to scrape those metrics, they must be transparently t
 ### Differences
 
 Other than metrics-server itself, this Docker container provides additional metrics metadata that are
-retrieved via `kubectl` API calls and included in the Prometheus output.
+retrieved via `python kubernetes client` API calls and included in the Prometheus output.
 
 ### How does it work
 
-The following diagram illustrates how the format transformation is achieved:
-
-[![workflow](doc/metrics-server-prom-adapter.png)](doc/metrics-server-prom-adapter.png)
-
 1. Prometheus scrapes the Docker container on `:9100/metrics`
 2. Inside the Docker container [uwsgi](https://github.com/unbit/uwsgi) is proxying the request to [kube proxy](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/)
-3. kube-proxy reads the provided config file and tunnels the request into Kubernetes to metrics-server
-4. metrics-server replies with JSON formatted metrics
-5. kube proxy forwards the request back to uwsgi
-6. uwsgi calls [transform.py](data/src/transform.py)
-7. transform.py rewrites the JSON into Prometheus readable output and hands the result back to uwsgi
-8. uwsgi sends the final response back to Prometheus
+3. The Python kubernetes client will be created and requests the k8s API
+4. The API replies with JSON formatted metrics provided by metrics-server
+5. uwsgi calls [transform.py](data/src/transform.py)
+6. transform.py rewrites the JSON into Prometheus readable output and hands the result back to uwsgi
+8. uwsgi sends the final response back
 
 
 ## Usage
 
 ### Run metrics-server-prom
 
-Simply run the Docker image with a kube config mounted into `/etc/kube/config`.
-
-```bash
-$ docker run -d \
-    -p 9100:9100 \
-    -v ${HOME}/.kube/config:/etc/kube/config:ro \
-    cytopia/metrics-server-prom
-```
-If your kube config contains multiple contexts, you can tell `metrics-server-prom` what context
-to use, to connect to the cluster.
-
-```bash
-$ docker run -d \
-    -p 9100:9100 \
-    -v ${HOME}/.kube/config:/etc/kube/config:ro \
-    -e KUBE_CONTEXT=my-context \
-    cytopia/metrics-server-prom
-```
+Simply run the Docker image in a cluster with a mounted token for a ServiceAccount in `/var/run/secrets/kubernetes.io/serviceaccount/token` (needs access to call the API)
 
 ### Configure Prometheus
 
@@ -80,17 +55,6 @@ scrape_configs:
       - targets:
         - <DOCKER_IP_ADDRESS>:9100
 ```
-
-## Docker Compose
-
-To test this out locally, this repository ships an example Docker Compose setup with
-metrics-server-prom and Prometheus.
-
-1. Navigate to [example/](example/)
-2. Copy `env-example` to `.env`
-3. Adjust `KUBE_CONTEXT` in `.env`
-4. Run it `docker-compose up`
-
 
 ## Metrics transformation
 
