@@ -99,19 +99,10 @@ def val2base(string):
     val = re.search('^([0-9]+)n$', string, re.IGNORECASE)
     if val and val.group(1):
         return float(val.group(1)) / 1000000000
-    # Convert cpu millicores into cores if m is greater than 60 (assume it is a unit of millicore)
+    # Convert cpu millicores into cores
     val = re.search('^([0-9]+)m$', string, re.IGNORECASE)
-        if val and (int(val.group(1)) > 59):
+    if val and val.group(1):
         return float(val.group(1)) / 1000
-
-    # Convert hours, minutes, and seconds to seconds when m is less than 60 (assume it is a unit of time)
-    val = re.search('^(([0-9]+)\s*h\s*)?(([0-9]+)\s*m\s*)?(([0-9]+)\s*s\s*)?$', string, re.IGNORECASE)
-    if val and (val.group(2) or (val.group(4) and (int(val.group(4)) < 60 )) or val.group(6)):
-        return (
-            (int(val.group(2) or 0) * 60 * 60) +
-            (int(val.group(4) or 0) * 60) +
-            (int(val.group(6) or 0))
-        )
 
     # Otherwise return value as it came in
     return string
@@ -133,7 +124,7 @@ def trans_node_metrics(string):
     cpu = []
     mem = []
 
-    cpu.append('# HELP kube_metrics_server_node_cpu The CPU time of a node in seconds.')
+    cpu.append('# HELP kube_metrics_server_node_cpu The CPU cores')
     cpu.append('# TYPE kube_metrics_server_node_cpu gauge')
     mem.append('# HELP kube_metrics_server_node_mem The memory of a node in Bytes.')
     mem.append('# TYPE kube_metrics_server_node_mem gauge')
@@ -170,7 +161,7 @@ def trans_pod_metrics(string):
     cpu = []
     mem = []
 
-    cpu.append('# HELP kube_metrics_server_pod_cpu The CPU time of a pod in seconds.')
+    cpu.append('# HELP kube_metrics_server_pod_cpu The CPU cores of a pod.')
     cpu.append('# TYPE kube_metrics_server_pod_cpu gauge')
     mem.append('# HELP kube_metrics_server_pod_mem The memory of a pod in Bytes.')
     mem.append('# TYPE kube_metrics_server_pod_mem gauge')
