@@ -95,9 +95,18 @@ def val2base(string):
     if val and val.group(1):
         return int(val.group(1)) * (1024*1024*1024*1024)
 
-    # Transform hours, minutes and seconds into seconds
+    # Convert cpu nanocores into cores
+    val = re.search('^([0-9]+)n$', string, re.IGNORECASE)
+    if val and val.group(1):
+        return float(val.group(1)) / 1000000000
+    # Convert cpu millicores into cores if m is greater than 60 (assume it is a unit of millicore)
+    val = re.search('^([0-9]+)m$', string, re.IGNORECASE)
+        if val and (int(val.group(1)) > 59):
+        return float(val.group(1)) / 1000
+
+    # Convert hours, minutes, and seconds to seconds when m is less than 60 (assume it is a unit of time)
     val = re.search('^(([0-9]+)\s*h\s*)?(([0-9]+)\s*m\s*)?(([0-9]+)\s*s\s*)?$', string, re.IGNORECASE)
-    if val and (val.group(2) or val.group(4) or val.group(6)):
+    if val and (val.group(2) or (val.group(4) and (int(val.group(4)) < 60 )) or val.group(6)):
         return (
             (int(val.group(2) or 0) * 60 * 60) +
             (int(val.group(4) or 0) * 60) +
