@@ -134,11 +134,10 @@ def trans_node_metrics(string):
     for node in data.get('items', []):
         lbl = {
             'node': node.get('metadata', []).get('name', ''),
-            'nodegr': node.get('metadata.labels', []).get('eks.amazonaws.com/nodegroup', ''),
+            'nodegr': node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/nodegroup', ''),
             'zone': node.get('metadata', []).get('labels', []).get('topology.kubernetes.io/zone', ''),
             'instancetype': node.get('metadata', []).get('labels', []).get('beta.kubernetes.io/instance-type', ''),
             'capacitytype': node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/capacityType', '')
-
         }
         val = {
             'cpu': node.get('usage', []).get('cpu', ''),
@@ -181,6 +180,7 @@ def trans_pod_metrics(string):
     more = get_pod_metrics_from_cli()
     cpu = []
     mem = []
+    age = []
 
     cpu.append('# HELP kube_metrics_server_pod_cpu The CPU cores of a pod.')
     cpu.append('# TYPE kube_metrics_server_pod_cpu gauge')
@@ -227,7 +227,19 @@ def trans_pod_metrics(string):
                 more[lbl['pod']]['restarts'],
                 val2base(val['mem'])
             ))
-    return '\n'.join(cpu + mem)
+            age.append(tpl.format(
+                'age',
+                more[lbl['pod']]['node'],
+                lbl['pod'],
+                more[lbl['pod']]['ip'],
+                lbl['cont'],
+                lbl['ns'],
+                more[lbl['pod']]['age'],
+                more[lbl['pod']]['age_seconds'],
+                more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['age_seconds']
+            ))
+    return '\n'.join(cpu + mem + age)
 
 
 def get_pod_metrics_from_cli():
