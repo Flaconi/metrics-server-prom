@@ -189,7 +189,7 @@ def trans_pod_metrics(string):
     age.append('# HELP kube_metrics_server_pod_age The age of a pod in seconds.')
     age.append('# TYPE kube_metrics_server_pod_age gauge')
 
-    tpl = 'kube_metrics_server_pod_{}{{node="{}", pod="{}", ip="{}",container="{}", namespace="{}", age="{}", age_seconds="{}", restarts={} }} {}'
+    tpl = 'kube_metrics_server_pod_{}{{node="{}", pod="{}", ip="{}",container="{}", namespace="{}", age="{}", age_seconds="{}", restarts="{}" }} {}'
 
     for pod in data.get('items', []):
         lbl = {
