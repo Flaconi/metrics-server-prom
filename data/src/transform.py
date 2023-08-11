@@ -10,7 +10,7 @@ into Prometheus readable format.
 import os
 import json
 import re
-import time
+import datetime
 import subprocess
 import kubernetes.client
 from kubernetes import client, config
@@ -129,18 +129,40 @@ def trans_node_metrics(string):
     mem.append('# HELP kube_metrics_server_node_mem The memory of a node in Bytes.')
     mem.append('# TYPE kube_metrics_server_node_mem gauge')
 
-    tpl = 'kube_metrics_server_node_{}{{node="{}"}} {}'
+    tpl = 'kube_metrics_server_node_{}{{node="{}", nodegroup="{}", groupalias="{}", zone="{}", instancetype="{}", capacitytype="{}"}} {}'
 
     for node in data.get('items', []):
         lbl = {
-            'node': node.get('metadata', []).get('name', '')
+            'node': node.get('metadata', []).get('name', ''),
+            'nodegr': node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/nodegroup', ''),
+            'zone': node.get('metadata', []).get('labels', []).get('topology.kubernetes.io/zone', ''),
+            'instancetype': node.get('metadata', []).get('labels', []).get('beta.kubernetes.io/instance-type', ''),
+            'capacitytype': node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/capacityType', '')
         }
         val = {
             'cpu': node.get('usage', []).get('cpu', ''),
             'mem': node.get('usage', []).get('memory', '')
         }
-        cpu.append(tpl.format('cpu', lbl['node'], val2base(val['cpu'])))
-        mem.append(tpl.format('mem', lbl['node'], val2base(val['mem'])))
+        cpu.append(tpl.format(
+          'cpu',
+          lbl['node'],
+          lbl['nodegr'],
+          lbl['nodegr'].split('-')[0],
+          lbl['zone'],
+          lbl['instancetype'],
+          lbl['capacitytype'],
+          val2base(val['cpu'])
+        ))
+        mem.append(tpl.format(
+          'mem',
+          lbl['node'],
+          lbl['nodegr'],
+          lbl['nodegr'].split('-')[0],
+          lbl['zone'],
+          lbl['instancetype'],
+          lbl['capacitytype'],
+          val2base(val['mem'])
+        ))
     return '\n'.join(cpu + mem)
 
 
@@ -160,13 +182,16 @@ def trans_pod_metrics(string):
     more = get_pod_metrics_from_cli()
     cpu = []
     mem = []
+    age = []
 
     cpu.append('# HELP kube_metrics_server_pod_cpu The CPU cores of a pod.')
     cpu.append('# TYPE kube_metrics_server_pod_cpu gauge')
     mem.append('# HELP kube_metrics_server_pod_mem The memory of a pod in Bytes.')
     mem.append('# TYPE kube_metrics_server_pod_mem gauge')
+    age.append('# HELP kube_metrics_server_pod_age The age of a pod in seconds.')
+    age.append('# TYPE kube_metrics_server_pod_age gauge')
 
-    tpl = 'kube_metrics_server_pod_{}{{node="{}",pod="{}",ip="{}",container="{}",namespace="{}"}} {}'
+    tpl = 'kube_metrics_server_pod_{}{{node="{}", pod="{}", ip="{}",container="{}", namespace="{}", age="{}", age_seconds="{}", restarts="{}", nodegroup="{}", groupalias="{}" }} {}'
 
     for pod in data.get('items', []):
         lbl = {
@@ -187,6 +212,11 @@ def trans_pod_metrics(string):
                 more[lbl['pod']]['ip'],
                 lbl['cont'],
                 lbl['ns'],
+                more[lbl['pod']]['age'],
+                more[lbl['pod']]['age_seconds'],
+                more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['nodegroup'],
+                more[lbl['pod']]['nodegroup'].split('-')[0],
                 val2base(val['cpu'])
             ))
             mem.append(tpl.format(
@@ -196,9 +226,28 @@ def trans_pod_metrics(string):
                 more[lbl['pod']]['ip'],
                 lbl['cont'],
                 lbl['ns'],
+                more[lbl['pod']]['age'],
+                more[lbl['pod']]['age_seconds'],
+                more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['nodegroup'],
+                more[lbl['pod']]['nodegroup'].split('-')[0],
                 val2base(val['mem'])
             ))
-    return '\n'.join(cpu + mem)
+            age.append(tpl.format(
+                'age',
+                more[lbl['pod']]['node'],
+                lbl['pod'],
+                more[lbl['pod']]['ip'],
+                lbl['cont'],
+                lbl['ns'],
+                more[lbl['pod']]['age'],
+                more[lbl['pod']]['age_seconds'],
+                more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['nodegroup'],
+                more[lbl['pod']]['nodegroup'].split('-')[0],
+                more[lbl['pod']]['age_seconds']
+            ))
+    return '\n'.join(cpu + mem + age)
 
 
 def get_pod_metrics_from_cli():
@@ -210,10 +259,17 @@ def get_pod_metrics_from_cli():
     '''
 
     data = dict()
+    nodedata = json2dict(requests.get(URL_NODES, verify=False, headers=HEADERS).text)
 
     # 1:NS | 2:Name | 3:Ready | 4:Status | 5:Restarts | 6:Age | 7:IP | 8:Node | 9: NOMINATED NODE
     ret = v1.list_pod_for_all_namespaces(watch=False)
     for line in ret.items:
+
+        # Loop over nodes for in each pod
+        for node in nodedata.get('items', []):
+            if node.get('metadata', []).get('name', '') == line.spec.node_name:
+                nodegroup = node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/nodegroup', '')
+                break
 
         data[line.metadata.name] = {
             'ns': line.metadata.namespace,
@@ -221,13 +277,36 @@ def get_pod_metrics_from_cli():
             'ready': line.status.container_statuses[0].ready,
             'status': line.status.phase,
             'restarts': line.status.container_statuses[0].restart_count,
-            'age': 'n/a',
+            'age': age(line.metadata.creation_timestamp, 'formatted'),
+            'age_seconds': age(line.metadata.creation_timestamp, 'secs'),
             'ip': line.status.pod_ip,
-            'node': line.spec.node_name
+            'node': line.spec.node_name,
+            'nodegroup': nodegroup
         }
 
     return data
 
+def age(starttime, format):
+
+    # calculate age in different formats
+    now = datetime.datetime.now().astimezone()
+    diff = now-starttime
+
+    if format == 'formatted':
+        days = diff.days
+        hours, rest = divmod(diff.seconds, 3600)
+        mins, secs = divmod(rest, 60)
+        age = f"{days}d {hours}h {mins}m {secs}s"
+    elif format == 'secs':
+        age = diff.total_seconds()
+    elif format == 'mins':
+        age = diff.total_seconds()/60
+    elif format == 'hours':
+        age = diff.total_seconds()/60/60
+    elif format == 'days':
+        age = diff.total_seconds()/60/60/24
+
+    return age
 
 application = Flask(__name__) # pylint: disable=invalid-name
 
