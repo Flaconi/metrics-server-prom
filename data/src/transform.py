@@ -129,7 +129,7 @@ def trans_node_metrics(string):
     mem.append('# HELP kube_metrics_server_node_mem The memory of a node in Bytes.')
     mem.append('# TYPE kube_metrics_server_node_mem gauge')
 
-    tpl = 'kube_metrics_server_node_{}{{node="{}", nodegroup="{}", zone="{}", instancetype="{}", capacitytype="{}"}} {}'
+    tpl = 'kube_metrics_server_node_{}{{node="{}", nodegroup="{}", groupalias="{}", zone="{}", instancetype="{}", capacitytype="{}"}} {}'
 
     for node in data.get('items', []):
         lbl = {
@@ -147,6 +147,7 @@ def trans_node_metrics(string):
           'cpu',
           lbl['node'],
           lbl['nodegr'],
+          lbl['nodegr'].split('-')[0],
           lbl['zone'],
           lbl['instancetype'],
           lbl['capacitytype'],
@@ -156,6 +157,7 @@ def trans_node_metrics(string):
           'mem',
           lbl['node'],
           lbl['nodegr'],
+          lbl['nodegr'].split('-')[0],
           lbl['zone'],
           lbl['instancetype'],
           lbl['capacitytype'],
@@ -189,7 +191,7 @@ def trans_pod_metrics(string):
     age.append('# HELP kube_metrics_server_pod_age The age of a pod in seconds.')
     age.append('# TYPE kube_metrics_server_pod_age gauge')
 
-    tpl = 'kube_metrics_server_pod_{}{{node="{}", pod="{}", ip="{}",container="{}", namespace="{}", age="{}", age_seconds="{}", restarts="{}" }} {}'
+    tpl = 'kube_metrics_server_pod_{}{{node="{}", pod="{}", ip="{}",container="{}", namespace="{}", age="{}", age_seconds="{}", restarts="{}", nodegroup="{}", groupalias="{}" }} {}'
 
     for pod in data.get('items', []):
         lbl = {
@@ -213,6 +215,8 @@ def trans_pod_metrics(string):
                 more[lbl['pod']]['age'],
                 more[lbl['pod']]['age_seconds'],
                 more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['nodegroup'],
+                more[lbl['pod']]['nodegroup'].split('-')[0],
                 val2base(val['cpu'])
             ))
             mem.append(tpl.format(
@@ -225,6 +229,8 @@ def trans_pod_metrics(string):
                 more[lbl['pod']]['age'],
                 more[lbl['pod']]['age_seconds'],
                 more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['nodegroup'],
+                more[lbl['pod']]['nodegroup'].split('-')[0],
                 val2base(val['mem'])
             ))
             age.append(tpl.format(
@@ -237,6 +243,8 @@ def trans_pod_metrics(string):
                 more[lbl['pod']]['age'],
                 more[lbl['pod']]['age_seconds'],
                 more[lbl['pod']]['restarts'],
+                more[lbl['pod']]['nodegroup'],
+                more[lbl['pod']]['nodegroup'].split('-')[0],
                 more[lbl['pod']]['age_seconds']
             ))
     return '\n'.join(cpu + mem + age)
@@ -251,10 +259,17 @@ def get_pod_metrics_from_cli():
     '''
 
     data = dict()
+    nodedata = json2dict(requests.get(URL_NODES, verify=False, headers=HEADERS).text)
 
     # 1:NS | 2:Name | 3:Ready | 4:Status | 5:Restarts | 6:Age | 7:IP | 8:Node | 9: NOMINATED NODE
     ret = v1.list_pod_for_all_namespaces(watch=False)
     for line in ret.items:
+
+        # Loop over nodes for in each pod
+        for node in nodedata.get('items', []):
+            if node.get('metadata', []).get('name', '') == line.spec.node_name:
+                nodegroup = node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/nodegroup', '')
+                break
 
         data[line.metadata.name] = {
             'ns': line.metadata.namespace,
@@ -265,7 +280,8 @@ def get_pod_metrics_from_cli():
             'age': age(line.metadata.creation_timestamp, 'formatted'),
             'age_seconds': age(line.metadata.creation_timestamp, 'secs'),
             'ip': line.status.pod_ip,
-            'node': line.spec.node_name
+            'node': line.spec.node_name,
+            'nodegroup': nodegroup
         }
 
     return data
