@@ -1,50 +1,39 @@
 ARG PYTHON_VERSION=3
 FROM python:${PYTHON_VERSION}-slim
 
-ENV USER=prometheus
-ENV GROUP=prometheus
+ENV USER="prometheus"
+ENV GROUP="prometheus"
 
-ENV APT_BUILD_DEPS \
-	curl \
-	g++ \
-	gcc \
-	libnewlib-arm-none-eabi
+ENV APT_BUILD_DEPS="curl g++ gcc libnewlib-arm-none-eabi"
 
-ENV APT_RUN_DEPS \
-	python3-pip \
-	supervisor
+ENV APT_RUN_DEPS="python3-pip supervisor"
 
-ENV PIP_RUN_DEPS \
-	virtualenv \
-	uwsgi
+ENV PIP_SYSTEM_DEPS="virtualenv uwsgi"
+
+ENV PIP_VENV_DEPS="flask requests kubernetes"
 
 RUN set -x \
-	&& apt-get update \
-	&& apt-get install --no-install-recommends --no-install-suggests -y \
-		${APT_BUILD_DEPS} \
-		${APT_RUN_DEPS} \
-	&& pip install \
-		${PIP_RUN_DEPS} \
-	&& apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
-		${APT_BUILD_DEPS} \
-	&& rm -rf /var/lib/apt/lists/*
+  && apt-get update \
+  && apt-get install --no-install-recommends --no-install-suggests -y \
+   ${APT_BUILD_DEPS} \
+   ${APT_RUN_DEPS} \
+  && pip install \
+   ${PIP_SYSTEM_DEPS} \
+  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+   ${APT_BUILD_DEPS} \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN set -x \
-	&& groupadd --gid 1000 ${GROUP} \
-	&& useradd --gid 1000 --uid 1000 --create-home --shell /bin/bash ${USER}
-
-ENV PIP_RUN_DEPS \
-	flask \
-	requests \
-	kubernetes
+  && groupadd --gid 1000 ${GROUP} \
+  && useradd --gid 1000 --uid 1000 --create-home --shell /bin/bash ${USER}
 
 USER ${USER}
 RUN set -x \
-	&& mkdir /home/${USER}/transform \
-	&& cd /home/${USER}/transform \
-	&& virtualenv transformenv \
-	&& . transformenv/bin/activate \
-	&& pip install ${PIP_RUN_DEPS}
+  && mkdir /home/${USER}/transform \
+  && cd /home/${USER}/transform \
+  && virtualenv transformenv \
+  && . transformenv/bin/activate \
+  && pip install ${PIP_VENV_DEPS}
 
 USER root
 

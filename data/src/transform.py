@@ -265,7 +265,12 @@ def get_pod_metrics_from_cli():
     ret = v1.list_pod_for_all_namespaces(watch=False)
     for line in ret.items:
 
+        # Skip pods with no container statuses (e.g., still being created or terminating)
+        if not line.status.container_statuses:
+            continue
+
         # Loop over nodes for in each pod
+        nodegroup = ''
         for node in nodedata.get('items', []):
             if node.get('metadata', []).get('name', '') == line.spec.node_name:
                 nodegroup = node.get('metadata', []).get('labels', []).get('eks.amazonaws.com/nodegroup', '')
@@ -274,9 +279,9 @@ def get_pod_metrics_from_cli():
         data[line.metadata.name] = {
             'ns': line.metadata.namespace,
             'name': line.metadata.name,
-            'ready': line.status.container_statuses[0].ready,
+            'ready': line.status.container_statuses[0].ready if line.status.container_statuses else False,
             'status': line.status.phase,
-            'restarts': line.status.container_statuses[0].restart_count,
+            'restarts': line.status.container_statuses[0].restart_count if line.status.container_statuses else 0,
             'age': age(line.metadata.creation_timestamp, 'formatted'),
             'age_seconds': age(line.metadata.creation_timestamp, 'secs'),
             'ip': line.status.pod_ip,
