@@ -12,7 +12,6 @@ import json
 import re
 import datetime
 import subprocess
-import kubernetes.client
 from kubernetes import client, config
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -22,24 +21,25 @@ from flask import Response
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 '''
+Load in-cluster Kubernetes configuration
+This automatically loads the service account token, API host, and CA certificate
+from the mounted secrets directory.
+'''
+config.load_incluster_config()
+
+'''
 Globals that specify at which url metrics for nodes and pods can be found
 '''
-
 with open('/var/run/secrets/kubernetes.io/serviceaccount/token','r') as saFile:
     saToken = saFile.read()
 
 API = 'https://kubernetes.default.svc'
 URL_NODES = API + '/apis/metrics.k8s.io/v1beta1/nodes'
 URL_PODS = API + '/apis/metrics.k8s.io/v1beta1/pods'
-HEADERS = {"Authorization": "Bearer "+saToken}
+HEADERS = {"Authorization": "Bearer " + saToken}
 
-# create ApiClient
-cConfiguration = client.Configuration()
-cConfiguration.host = API
-cConfiguration.verify_ssl = False
-cConfiguration.api_key = {"authorization": "Bearer " + saToken}
-cApiClient = client.ApiClient(cConfiguration)
-v1 = client.CoreV1Api(cApiClient)
+# Create CoreV1Api using the loaded in-cluster configuration
+v1 = client.CoreV1Api()
 
 def json2dict(data):
     '''
